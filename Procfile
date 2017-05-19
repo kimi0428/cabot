@@ -1,2 +1,3 @@
-web:       gunicorn wsgi:application --config gunicorn.conf
-celery:    celery worker -B -A app.cabotapp.tasks --loglevel=INFO --concurrency=16 -Ofair
+web:       gunicorn cabot.wsgi:application --config gunicorn.conf
+celery:    celery worker -A cabot --loglevel=INFO --concurrency=16 -Ofair
+beat:      celery beat -A cabot --loglevel=INFO

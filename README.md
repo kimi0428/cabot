@@ -1,5 +1,11 @@
 Cabot
 =====
+[![Build Status](https://travis-ci.org/arachnys/cabot.svg?branch=master)](https://travis-ci.org/arachnys/cabot) 
+[![PyPI version](https://badge.fury.io/py/cabot.svg)](https://badge.fury.io/py/cabot)
+[![Coverage Status](https://codecov.io/github/arachnys/cabot/coverage.svg?branch=master)](https://codecov.io/github/arachnys/cabot?branch=master)
+[![Requirements Status](https://requires.io/github/arachnys/cabot/requirements.svg?branch=master)](https://requires.io/github/arachnys/cabot/requirements/?branch=master)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Gitter](https://img.shields.io/gitter/room/arachnys/cabot.svg)](https://gitter.im/arachnys/cabot)
 
 Cabot is a free, open-source, self-hosted infrastructure monitoring platform that provides some of the best features of [PagerDuty](http://www.pagerduty.com), [Server Density](http://www.serverdensity.com), [Pingdom](http://www.pingdom.com) and [Nagios](http://www.nagios.org) without their cost and complexity. (Nagios, I'm mainly looking at you.)
 
@@ -27,7 +33,7 @@ Cabot is written in Python and uses [Django](https://www.djangoproject.com/), [B
 
 ## Quickstart
 
-Deploy in 5 minutes or less using [official quickstart guide at cabotapp.com](http://cabotapp.com/qs/quickstart.html).
+Using Docker: Deploy in 5 minutes or less using [official quickstart guide at cabotapp.com](http://cabotapp.com/qs/quickstart.html). (See also https://hub.docker.com/r/cabotapp/cabot/)
 
 ## How it works
 
@@ -59,6 +65,52 @@ My dog is called Cabot and he loves monitoring things. Mainly the presence of fo
 ![Cabot watching... something](https://dl.dropboxusercontent.com/sc/w0k0185wur929la/RN6X-PkZIl/0?dl=1&token_hash=AAEvyK-dMHsvMPwMsx89tSHXsUlMC8WN_fIu_H1Vo9wxWA)
 
 It's just a lucky coincidence that his name sounds like he could be an automation tool.
+
+## API
+
+The API has automatically generated documentation available by browsing https://cabot.yourcompany.com/api.  The browsable documentation displays example GET requests and lists other allowed HTTP methods.  
+
+To view individual items, append the item `id` to the url.  For example, to view `graphite_check` 1, browse:
+```
+/api/graphite_checks/1/
+```
+
+### Authentication
+
+The API allows HTTP basic auth using standard Django usernames and passwords as well as session authentication (by submitting the login form on the login page).  The API similarly uses standard Django permissions to allow and deny API access.
+
+All resources are GETable by any authenticated user, but individual permissions must be granted for POST, PUT, and other write methods.
+
+As an example, for POST access to all `status_check` subclasses, add the following permissions:
+```
+cabotapp | status check | Can add graphite status check
+cabotapp | status check | Can add http status check
+cabotapp | status check | Can add icmp status check
+cabotapp | status check | Can add jenkins status check
+```
+
+Access the Django admin page at https://cabot.yourcompany.com/admin to add/remove users, change user permissions, add/remove groups for group-based permission control, and change group permissions.
+
+### Sorting and Filtering
+
+Sorting and filtering can be used by both REST clients and on the browsable API.  All fields visible in the browsable API can be used for filtering and sorting.
+
+Get all `jenkins_checks` with debounce enabled and CRITICAL importance:
+```
+https://cabot.yourcompany.com/api/jenkins_checks/?debounce=1&importance=CRITICAL
+```
+
+Sort `graphite_checks` by `name` field, ascending:
+```
+https://cabot.yourcompany.com/api/graphite_checks/?ordering=name
+```
+
+Sort by `name` field, descending:
+```
+https://cabot.yourcompany.com/api/graphite_checks/?ordering=-name
+```
+
+Other (non-Cabot specific) examples are available in the [Django REST Framework](http://www.django-rest-framework.org/api-guide/filtering#djangofilterbackend) documentation.
 
 ## License
 

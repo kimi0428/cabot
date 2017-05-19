@@ -29,37 +29,60 @@ def _ensure_dirs():
 
 def _setup_venv():
     with settings(warn_only=True):
-        if sudo('test -d %s' % VENV_DIR).failed:
-            sudo('virtualenv %s' % VENV_DIR)
+        venv_doesnt_exist = sudo('test -d %s' % VENV_DIR).failed
+    if venv_doesnt_exist:
+        # without --setuptools, you get `pkg_resources not found` error
+        sudo('virtualenv --setuptools %s' % VENV_DIR, user='ubuntu')
 
 
 def install_requirements(deploy_path=DEPLOY_PATH):
-    with cd(deploy_path):
-        with prefix("source {venv}/bin/activate".format(venv=VENV_DIR)):
-            sudo(
-                "{venv}/bin/pip install -r requirements.txt --exists-action=w".format(venv=VENV_DIR))
+    sudo("foreman run -e conf/{env}.env {venv}/bin/pip install --editable {path} --exists-action=w".format(
+        env=env.deploy_version, venv=VENV_DIR, path=deploy_path))
 
 
 def run_migrations(deploy_path=DEPLOY_PATH):
     with cd(deploy_path):
         with prefix("source {venv}/bin/activate".format(venv=VENV_DIR)):
             sudo(
-                "foreman run python manage.py syncdb -e conf/{env}.env".format(env=env.deploy_version))
+                "foreman run -e conf/{env}.env python manage.py migrate --noinput".format(env=env.deploy_version))
             sudo(
-                "foreman run python manage.py migrate cabotapp --noinput -e conf/{env}.env".format(env=env.deploy_version))
+                "foreman run -e conf/{env}.env python manage.py migrate cabotapp --noinput".format(env=env.deploy_version))
+            sudo(
+                "foreman run -e conf/{env}.env python manage.py createsuperuser".format(env=env.deploy_version))
             # Wrap in failure for legacy reasons
+            # https://github.com/celery/django-celery/issues/149
+            print "You can ignore an error message regarding 'relation \"celery_taskmeta\" already exists'"
             with settings(warn_only=True):
                 sudo(
-                    "foreman run python manage.py migrate djcelery --noinput -e conf/{env}.env".format(env=env.deploy_version))
+                    "foreman run -e conf/{env}.env python manage.py migrate djcelery --noinput".format(env=env.deploy_version))
+
+
+def create_user(username, password, email):
+    """ creates a django user on the cabot server.  existing users
+        are clobbered so this also functions as a crude password reset.
+    """
+    code = (
+        """username='{username}';"""
+        """password='{password}';"""
+        """email='{email}';"""
+        """from django.contrib.auth.models import User;"""
+        """User.objects.filter(username=username).delete();"""
+        """User.objects.create_superuser(username, email, password);""")
+    code = code.format(username=username, password=password, email=email)
+    shell_cmd = "foreman run -e conf/production.env python manage.py shell"
+    with prefix("source ~ubuntu/venv/bin/activate"):
+        with cd("~ubuntu/cabot"):
+            sudo('printf "{0}"|{1}'.format(code, shell_cmd))
+
 
 
 def collect_static(deploy_path=DEPLOY_PATH):
     with cd(deploy_path):
         with prefix("source {venv}/bin/activate".format(venv=VENV_DIR)):
             sudo(
-                "foreman run python manage.py collectstatic --noinput -e conf/{env}.env".format(env=env.deploy_version))
+                "foreman run -e conf/{env}.env python manage.py collectstatic --noinput".format(env=env.deploy_version))
             sudo(
-                "foreman run python manage.py compress -e conf/{env}.env".format(env=env.deploy_version))
+                "foreman run -e conf/{env}.env python manage.py compress".format(env=env.deploy_version))
 
 
 def setup_upstart(deploy_path=DEPLOY_PATH):
@@ -82,8 +105,9 @@ def production():
 
 def restart():
     with settings(warn_only=True):
-        if sudo('restart cabot').failed:
-            sudo('start cabot')
+        restart_failed = sudo('restart cabot').failed
+    if restart_failed:
+        sudo('start cabot')
 
 
 def stop():
@@ -123,10 +147,12 @@ def deploy(deploy_version=None):
     rsync_project(
         remote_dir=deploy_path,
         local_dir='./',
-        exclude=['.git', 'backups', 'venv',
+        ssh_opts='-o StrictHostKeyChecking=no',
+        exclude=['backups', 'venv',
                  'static/CACHE', '.vagrant', '*.pyc', 'dev.db'],
     )
     with cd(deploy_path):
+        _ensure_dirs()
         _setup_venv()
         create_database()
         install_requirements(deploy_path)
@@ -150,7 +176,12 @@ def backup():
     """
     backup_file = 'outfile.sql.gz'
     with cd(BACKUP_DIR):
-        run('PGPASSWORD=cabot pg_dump -U cabot index | gzip > {}'.format(backup_file))
+        run('PGPASSWORD={passwd} pg_dump -U {user} {database} | gzip > {backup}'.format(
+            passwd=PG_PASSWORD,
+            user=PG_USERNAME,
+            database=PG_DATABASE,
+            backup=backup_file
+            ))
         get(backup_file, 'backups/%(basename)s')
 
 
